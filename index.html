@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Printloo — Turn slide decks into ink-friendly printables</title>
+<meta name="description" content="Stack lecture or PPT slides into a print-ready PDF, with automatic dark-slide inversion to save ink. Runs entirely in your browser — nothing is uploaded.">
+<style>
+  /* 2016 Flat Web Design Aesthetic */
+  :root{
+    --bg: #e9ecef;
+    --header-bg: #2c3e50;
+    --header-text: #ffffff;
+    --panel-bg: #ffffff;
+    --ink: #333333;
+    --muted: #7f8c8d;
+    --border: #ccd1d1;
+    --accent: #3498db;
+    --accent-hover: #2980b9;
+    --accent-ink: #ffffff;
+    --cell: #fcfcfc;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Helvetica Neue", Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+
+  /* 2016 Style Banner Header */
+  header{
+    background: var(--header-bg);
+    color: var(--header-text);
+    padding: 40px 20px;
+    text-align: center;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.15);
+  }
+  header h1{margin:0; font-size:32px; font-weight: bold; letter-spacing: -0.5px;}
+  header p{margin:10px auto 0; max-width:650px; font-size:16px; color: #ecf0f1;}
+  
+  header .steps{
+    display:flex; justify-content:center; flex-wrap:wrap; gap:15px; margin:20px 0 0; padding:0; list-style:none; counter-reset:step;
+  }
+  header .steps li{
+    counter-increment:step; font-size:13px; color:#ecf0f1; display:flex; align-items:center; gap:6px; background: rgba(255,255,255,0.1); padding: 5px 12px; border-radius: 4px;
+  }
+  header .steps li::before{
+    content:counter(step); display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; background:var(--accent); color:var(--accent-ink); font-size:10px; font-weight:bold;
+  }
+
+  .badges{display:flex; justify-content:center; gap:10px; margin-top:15px; padding:0; list-style:none;}
+  .badges li{font-size:11px; padding:3px 10px; background: rgba(0,0,0,0.2); border-radius:3px; color:#bdc3c7;}
+
+  /* Main Grid Layout */
+  main{
+    max-width: 1050px; margin: 30px auto; padding: 0 15px;
+    display:grid; grid-template-columns: 360px 1fr; gap: 25px; align-items:start;
+  }
+  @media (max-width:850px){ main{grid-template-columns:1fr;} }
+
+  .panel{
+    background: var(--panel-bg); border: 1px solid var(--border); border-radius: 4px; padding: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .field{margin-bottom:15px;}
+  .field label{display:block; font-size:13px; font-weight:bold; color:var(--ink); margin-bottom:5px;}
+  
+  select, button, input[type=file], input[type=text]{
+    width:100%; padding:9px 12px; border-radius:4px; border:1px solid var(--border);
+    background: var(--cell); color:var(--ink); font-size:14px; font-family:inherit;
+  }
+  select:focus, input:focus, button:focus{outline:none; border-color:var(--accent); box-shadow: 0 0 5px rgba(52, 152, 219, 0.4);}
+
+  .row2{display:grid; grid-template-columns: 1fr 1fr; gap:10px;}
+  .checkline{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink); font-weight:normal;}
+  .checkline input{width:auto;}
+
+  /* 2016 Flat Action Buttons */
+  .btn-primary{
+    background: var(--accent); color: var(--accent-ink); border: none; font-weight: bold; cursor: pointer; padding: 10px 15px; border-radius: 4px; text-transform: uppercase; font-size: 13px; letter-spacing: 0.5px;
+    transition: background 0.2s;
+  }
+  .btn-primary:hover:not(:disabled){background: var(--accent-hover);}
+  .btn-primary:disabled{opacity: 0.5; cursor: not-allowed;}
+
+  .btn-ghost{
+    background: #e0e0e0; color: #333; border: none; font-weight: bold; cursor: pointer; padding: 8px 12px; border-radius: 4px; font-size: 13px;
+  }
+  .btn-ghost:hover{background: #d0d0d0;}
+
+  .status{font-size:12px; color:var(--muted); margin-top:8px; min-height:16px;}
+  
+  .dropzone{
+    border: 2px dashed var(--border); border-radius: 4px; padding: 20px 10px; text-align: center; cursor: pointer; background: #fafafa; font-weight: bold; font-size: 13px; color: #555;
+  }
+  .dropzone:hover, .dropzone.drag{border-color:var(--accent); background:#edf7fd;}
+  .dropzone span{display:block; font-size:11px; color:var(--muted); margin-top:3px; font-weight:normal;}
+
+  .progress{height:6px; background:var(--border); border-radius:3px; overflow:hidden; margin-top:8px; display:none;}
+  .progress.active{display:block;}
+  .progress .bar{height:100%; width:0%; background:var(--accent); transition:width .2s;}
+
+  h2{font-size:15px; margin:0 0 10px; border-bottom: 2px solid var(--border); padding-bottom: 5px; color: #2c3e50;}
+  
+  .strip{display:flex; flex-wrap:wrap; gap:6px; max-height:200px; overflow-y:auto; padding:2px;}
+  .thumb{position:relative; width:58px; cursor:pointer; border:1px solid var(--border); border-radius:3px; overflow:hidden; background:#fff;}
+  .thumb img{display:block; width:100%; height:auto;}
+  .thumb.inv img{filter:invert(1);}
+  .thumb.inv{border-color:var(--accent); box-shadow: 0 0 3px var(--accent);}
+  .thumb .num{position:absolute; bottom:0; right:0; background:rgba(0,0,0,0.7); color:#fff; font-size:8px; padding:1px 3px;}
+  .thumb .rm{position:absolute; top:0; right:0; width:15px; height:15px; line-height:13px; background:rgba(0,0,0,0.7); color:#fff; border:none; font-size:11px; cursor:pointer; text-align:center;}
+  .thumb .rm:hover{background:#c0392b;}
+
+  .sheets{display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; margin-top:10px;}
+  .sheets img{width:100%; border:1px solid var(--border); border-radius:3px; background:#fff;}
+
+  .muted-note{font-size:11px; color:var(--muted); margin-top:4px;}
+  .section-gap{margin-top:20px; padding-top:15px; border-top: 1px dashed var(--border);}
+
+  footer{text-align:center; padding:20px; color:var(--muted); font-size:12px; background: #e0e4e8; margin-top: 40px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Printloo</h1>
+  <p>Stack lecture slides into a print-ready PDF. Dark slides get auto-inverted to save ink, and short leftover pages are padded automatically.</p>
+  <ol class="steps">
+    <li>Upload PDF or screenshots</li>
+    <li>Configure grid & paper size</li>
+    <li>Build & download PDF</li>
+  </ol>
+  <ul class="badges">
+    <li>Client-side processing</li>
+    <li>No server uploads</li>
+  </ul>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="field">
+      <label>Lecture PDF or Slide Images</label>
+      <div class="dropzone" id="dropzone" tabindex="0" role="button">
+        📁 Click to upload or drag files here
+        <span>Supports PDF, JPG, PNG</span>
+      </div>
+      <input type="file" id="fileInput" accept="application/pdf,image/*" multiple style="display:none;">
+    </div>
+
+    <div class="row2 field">
+      <div>
+        <label for="perSheet">Slides per sheet</label>
+        <select id="perSheet">
+          <option value="2">2-up</option>
+          <option value="4" selected>4-up</option>
+          <option value="6">6-up</option>
+        </select>
+      </div>
+      <div>
+        <label for="paper">Paper size</label>
+        <select id="paper">
+          <option value="a4" selected>A4</option>
+          <option value="letter">Letter</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="padMode">Pad short ending sheets with…</label>
+      <select id="padMode">
+        <option value="last" selected>Repeated last slide</option>
+        <option value="first">Repeated first slide</option>
+        <option value="blank">Blank cell</option>
+      </select>
+    </div>
+
+    <div class="field checkline">
+      <input type="checkbox" id="autoInvert" checked>
+      <label for="autoInvert" style="margin:0; display:inline;">Auto-invert dark slides to save ink</label>
+    </div>
+
+    <button class="btn-primary" id="buildBtn" disabled>Build Printable PDF</button>
+    <button class="btn-ghost" id="clearBtn" style="margin-top:6px; width:100%;">Clear All</button>
+    <div class="status" id="status">No slides loaded.</div>
+    <div class="progress" id="progressWrap"><div class="bar" id="progressBar"></div></div>
+  </section>
+
+  <section class="panel">
+    <h2>Loaded Slides <span style="font-weight:normal; font-size:11px; color:var(--muted);">(Click to invert colors, × to delete)</span></h2>
+    <div class="strip" id="thumbStrip"></div>
+
+    <div class="section-gap">
+      <h2>Printable Output Preview</h2>
+      <div class="muted-note" id="sheetsNote">Build the PDF to preview layout sheets.</div>
+      
+      <!-- New Filename Rename Feature -->
+      <div class="field" style="margin-top:12px;">
+        <label for="pdfFilename">Output File Name</label>
+        <input type="text" id="pdfFilename" value="printloo.pdf">
+      </div>
+
+      <div class="sheets" id="sheetsPreview"></div>
+      <button class="btn-primary" id="downloadBtn" style="margin-top:12px;" disabled>Download PDF</button>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p>Printloo &copy; 2016 Style Utility — All slide processing happens locally inside your browser sandbox.</p>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const GRIDS = {2:{cols:1,rows:2}, 4:{cols:1,rows:4}, 6:{cols:1,rows:6}};
+let pages = [];       
+let pdfBlob = null;
+
+const $ = id => document.getElementById(id);
+const fileInput = $('fileInput'), dropzone = $('dropzone'), statusEl =$('status');
+const thumbStrip = $('thumbStrip'), buildBtn = $('buildBtn'), clearBtn =$('clearBtn');
+const downloadBtn = $('downloadBtn'), sheetsPreview = $('sheetsPreview'), sheetsNote =$('sheetsNote');
+const autoInvertChk = $('autoInvert'), pdfFilenameInput =$('pdfFilename');
+
+dropzone.onclick = () => fileInput.click();
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', (e) => { e.preventDefault(); dropzone.classList.remove('drag'); handleFiles(e.dataTransfer.files); });
+
+const progressWrap = $('progressWrap'), progressBar =$('progressBar');
+function setProgress(frac){
+  if (frac === null){ progressWrap.classList.remove('active'); progressBar.style.width = '0%'; return; }
+  progressWrap.classList.add('active');
+  progressBar.style.width = Math.round(frac * 100) + '%';
+}
+
+function detectDark(canvas){
+  const s = document.createElement('canvas'); s.width = 32; s.height = 32;
+  const sc = s.getContext('2d'); sc.drawImage(canvas, 0, 0, 32, 32);
+  const data = sc.getImageData(0, 0, 32, 32).data;
+  let sum = 0, n = 0;
+  for (let i = 0; i < data.length; i += 4){ sum += (data[i] + data[i+1] + data[i+2]) / 3; n++; }
+  return (sum / n) < 110;
+}
+
+function addThumb(idx){
+  const p = pages[idx];
+  p.thumbUrl = p.thumbUrl || p.canvas.toDataURL('image/jpeg', 0.5);
+  const wrap = document.createElement('div');
+  wrap.className = 'thumb' + (p.invert ? ' inv' : '');
+  const img = document.createElement('img');
+  img.src = p.thumbUrl;
+  wrap.appendChild(img);
+  const label = document.createElement('span'); label.className = 'num'; label.textContent = idx + 1;
+  wrap.appendChild(label);
+  const rm = document.createElement('button');
+  rm.type = 'button'; rm.className = 'rm'; rm.textContent = '×';
+  rm.onclick = (e) => { e.stopPropagation(); removeSlide(idx); };
+  wrap.appendChild(rm);
+  wrap.onclick = () => { p.invert = !p.invert; wrap.classList.toggle('inv', p.invert); };
+  thumbStrip.appendChild(wrap);
+}
+
+function removeSlide(idx){
+  pages.splice(idx, 1);
+  thumbStrip.innerHTML = '';
+  pages.forEach((_, i) => addThumb(i));
+  statusEl.textContent = pages.length ? `${pages.length} slide(s) loaded.` : 'No slides loaded.';
+  buildBtn.disabled = pages.length === 0;
+}
+
+async function loadPdfFile(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  for (let i = 1; i <= pdf.numPages; i++){
+    statusEl.textContent = `Rendering page ${i} of ${pdf.numPages}…`;
+    setProgress(i / pdf.numPages);
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 1.5 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    const invert = autoInvertChk.checked && detectDark(canvas);
+    pages.push({ canvas, invert });
+    addThumb(pages.length - 1);
+  }
+}
+
+async function loadImageFile(file){
+  const img = await new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im); im.onerror = rej;
+    im.src = URL.createObjectURL(file);
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+  canvas.getContext('2d').drawImage(img, 0, 0);
+  const invert = autoInvertChk.checked && detectDark(canvas);
+  pages.push({ canvas, invert });
+  addThumb(pages.length - 1);
+}
+
+async function handleFiles(fileList){
+  const files = Array.from(fileList);
+  if (!files.length) return;
+  buildBtn.disabled = true;
+  for (const f of files){
+    if (f.type === 'application/pdf') await loadPdfFile(f);
+    else if (f.type.startsWith('image/')) await loadImageFile(f);
+  }
+  setProgress(null);
+  statusEl.textContent = `${pages.length} slide(s) loaded. Ready to build.`;
+  buildBtn.disabled = pages.length === 0;
+}
+
+fileInput.onchange = (e) => { handleFiles(e.target.files); fileInput.value = ''; };
+
+clearBtn.onclick = () => {
+  pages = []; thumbStrip.innerHTML = ''; sheetsPreview.innerHTML = '';
+  pdfBlob = null; downloadBtn.disabled = true; buildBtn.disabled = true;
+  setProgress(null);
+  statusEl.textContent = 'No slides loaded.'; sheetsNote.textContent = 'Build the PDF to preview layout sheets.';
+};
+
+function padOrder(list, perSheet, mode){
+  const arr = list.slice();
+  const rem = arr.length % perSheet;
+  if (rem === 0) return arr;
+  const need = perSheet - rem;
+  for (let i = 0; i < need; i++){
+    if (mode === 'blank') arr.push(null);
+    else if (mode === 'first') arr.push(list[0]);
+    else arr.push(list[list.length - 1]);
+  }
+  return arr;
+}
+
+$('buildBtn').onclick = async () => {
+  if (!pages.length) return;
+  buildBtn.disabled = true;
+  const perSheet = +$('perSheet').value;
+  const { cols, rows } = GRIDS[perSheet];
+  const padMode = $('padMode').value;
+  const paper = $('paper').value;
+  const ordered = padOrder(pages, perSheet, padMode);
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: paper });
+  const pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
+  const margin = 5, cellW = (pageW - margin * 2) / cols, cellH = (pageH - margin * 2) / rows;
+  const pxPerMm = 7.5; 
+
+  sheetsPreview.innerHTML = '';
+  let sheetCount = 0;
+  const totalSheets = Math.ceil(ordered.length / perSheet);
+  for (let s = 0; s < ordered.length; s += perSheet){
+    sheetCount++;
+    statusEl.textContent = `Composing sheet ${sheetCount} of ${totalSheets}…`;
+    setProgress(sheetCount / totalSheets);
+    const chunk = ordered.slice(s, s + perSheet);
+    const sc = document.createElement('canvas');
+    sc.width = Math.round(pageW * pxPerMm); sc.height = Math.round(pageH * pxPerMm);
+    const ctx = sc.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, sc.width, sc.height);
+
+    chunk.forEach((p, i) => {
+      const col = Math.floor(i / rows), row = i % rows;
+      const cx = (margin + col * cellW) * pxPerMm, cy = (margin + row * cellH) * pxPerMm;
+      const cw = cellW * pxPerMm, ch = cellH * pxPerMm;
+      ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1; ctx.strokeRect(cx, cy, cw, ch);
+      if (!p) return;
+      const pad = 2 * pxPerMm, availW = cw - pad * 2, availH = ch - pad * 2;
+      const scale = Math.min(availW / p.canvas.width, availH / p.canvas.height);
+      const dw = p.canvas.width * scale, dh = p.canvas.height * scale;
+      const dx = cx + pad + (availW - dw) / 2, dy = cy + pad + (availH - dh) / 2;
+      ctx.save();
+      if (p.invert) ctx.filter = 'invert(1)';
+      ctx.drawImage(p.canvas, dx, dy, dw, dh);
+      ctx.restore();
+    });
+
+    const imgData = sc.toDataURL('image/jpeg', 0.9);
+    if (s > 0) doc.addPage();
+    doc.addImage(imgData, 'JPEG', 0, 0, pageW, pageH);
+
+    const thumb = document.createElement('img');
+    thumb.src = sc.toDataURL('image/jpeg', 0.5);
+    sheetsPreview.appendChild(thumb);
+  }
+
+  pdfBlob = doc.output('blob');
+  downloadBtn.disabled = false;
+  setProgress(null);
+  sheetsNote.textContent = `${sheetCount} printable page(s) built from ${pages.length} slide(s).`;
+  statusEl.textContent = `Done — ${sheetCount} page(s) ready.`;
+  buildBtn.disabled = false;
+};
+
+downloadBtn.onclick = () => {
+  if (!pdfBlob) return;
+  let filename = pdfFilenameInput.value.trim();
+  if (!filename.toLowerCase().endsWith('.pdf')) {
+    filename += '.pdf';
+  }
+  const url = URL.createObjectURL(pdfBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+};
+</script>
+</body>
+</html>
